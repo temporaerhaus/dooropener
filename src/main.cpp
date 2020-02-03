@@ -43,13 +43,13 @@ void setup() {
       if (!versiondata) {
         Serial.print("Didn't find PN53x board");
       } else {
-        Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
-        Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
+        Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX);
+        Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC);
         Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
         break;
       }
     }
-    
+
     nfc.SAMConfig();
   #endif
 
@@ -92,10 +92,10 @@ void loop() {
       } else {
         // compute hmac of payload
         byte hmacResult[32];
-      
+
         mbedtls_md_context_t ctx;
         mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-      
+
         mbedtls_md_init(&ctx);
         mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 1);
         mbedtls_md_hmac_starts(&ctx, (const unsigned char *) key, keyLength);
@@ -118,7 +118,7 @@ void loop() {
           digitalWrite(relais, LOW);
         }
       }
-  
+
       client.write(status);
       client.stop();
     }

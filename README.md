@@ -1,6 +1,8 @@
 # dooropener
 
-Firmware for the Olimex ESP32-EVB/ESP32-POE-ISO and PN532 based dooropener.
+![header](https://user-images.githubusercontent.com/1503861/73684166-eef7b680-46c3-11ea-8376-32262969b8e8.jpg)
+
+Firmware for an Olimex ESP32-EVB/ESP32-POE-ISO and PN532 based dooropener.
 
 ## Setup
 
