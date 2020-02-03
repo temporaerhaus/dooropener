@@ -137,24 +137,24 @@ void loop() {
 
   if (success && uidLength > 0) {
     // convert uid to hex string
-    char uid[uidLength * 2 + 1];
+    char rfiduid[uidLength * 2 + 1];
     for (uint8_t i = 0; i < uidLength; i += 1) {
       byte nib1 = (uid[i] >> 4) & 0x0F;
       byte nib2 = (uid[i] >> 0) & 0x0F;
-      uid[i*2+0] = nib1 < 0xA ? '0' + nib1 : 'a' + nib1 - 0xA;
-      uid[i*2+1] = nib2 < 0xA ? '0' + nib2 : 'a' + nib2 - 0xA;
+      rfiduid[i*2+0] = nib1 < 0xA ? '0' + nib1 : 'a' + nib1 - 0xA;
+      rfiduid[i*2+1] = nib2 < 0xA ? '0' + nib2 : 'a' + nib2 - 0xA;
     }
-    uid[uidLength*2] = '\0';
+    rfiduid[uidLength*2] = '\0';
 
     Serial.print("card detected -> ");
     Serial.print(authEndpoint);
-    Serial.println(uid);
+    Serial.println(rfiduid);
 
     HTTPClient http;
     WiFiClient client;
 
     // submit read uid to backend
-    http.begin(client, authEndpoint + uid);
+    http.begin(client, authEndpoint + rfiduid);
     int httpCode = http.GET();
 
     // debug output
