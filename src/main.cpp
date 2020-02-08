@@ -1,7 +1,58 @@
+#define ETH_CLK_MODE    ETH_CLOCK_GPIO17_OUT
+
+/* 
+   * ETH_CLOCK_GPIO0_IN   - default: external clock from crystal oscillator
+   * ETH_CLOCK_GPIO0_OUT  - 50MHz clock from internal APLL output on GPIO0 - possibly an inverter is needed for LAN8720
+   * ETH_CLOCK_GPIO16_OUT - 50MHz clock from internal APLL output on GPIO16 - possibly an inverter is needed for LAN8720
+   * ETH_CLOCK_GPIO17_OUT - 50MHz clock from internal APLL inverted output on GPIO17 - tested with LAN8720
+*/
+
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <ETH.h>
 #include "config.h"
+
+static bool eth_connected = false;
+
+void WiFiEvent(WiFiEvent_t event) {
+  switch (event) {
+    case SYSTEM_EVENT_ETH_START:
+      Serial.println("ETH Started");
+      ETH.setHostname("dooropener-salon");
+      break;
+
+    case SYSTEM_EVENT_ETH_CONNECTED:
+      Serial.println("ETH Connected");
+      break;
+
+    case SYSTEM_EVENT_ETH_GOT_IP:
+      Serial.print("ETH MAC: ");
+      Serial.print(ETH.macAddress());
+      Serial.print(", IPv4: ");
+      Serial.print(ETH.localIP());
+      if (ETH.fullDuplex()) {
+        Serial.print(", FULL_DUPLEX");
+      }
+      Serial.print(", ");
+      Serial.print(ETH.linkSpeed());
+      Serial.println("Mbps");
+      eth_connected = true;
+      break;
+
+    case SYSTEM_EVENT_ETH_DISCONNECTED:
+      Serial.println("ETH Disconnected");
+      eth_connected = false;
+      break;
+
+    case SYSTEM_EVENT_ETH_STOP:
+      Serial.println("ETH Stopped");
+      eth_connected = false;
+      break;
+
+    default:
+      break;
+  }
+}
 
 void setup() {
   #ifdef ARDUINO_ESP32_EVB
@@ -17,6 +68,7 @@ void setup() {
   Serial.println("Setting up Network...");
   ETH.begin();
 
+  /*
   while (ETH.localIP().toString() == "0.0.0.0") {
     Serial.print(".");
     delay(500);
@@ -24,13 +76,13 @@ void setup() {
 
   Serial.print("Connected. IP=");
   Serial.println(ETH.localIP());
+  */
 
   #ifdef ARDUINO_ESP32_EVB
     // open serial port to nfc reader
     Serial1.begin(9600);
 
     // initialize rng
-    Serial.print("initial_nonce: ");
     Serial.println(esp_random());
 
     serverSocket.begin();
@@ -65,18 +117,16 @@ void loop() {
     WiFiClient client = serverSocket.available();
 
     if (client) {
+      Serial.println("connected");
       uint32_t rand = esp_random();
-      uint8_t nonce[] = {
-        (uint8_t) (rand >> 24),
-        (uint8_t) (rand >> 16),
-        (uint8_t) (rand >> 8),
-        (uint8_t) (rand >> 0)
-      };
+      uint8_t* nonce = (uint8_t*) &rand;
+      Serial.println("gen_nonce");
 
       client.write(nonce, 4);
+      Serial.println("send_nonce");
 
       // give backend one second to reply
-      delay(1000);
+      delay(300);
 
       // read backend response
       uint8_t response[37];
@@ -86,6 +136,7 @@ void loop() {
 
       uint8_t status = 0;
 
+      Serial.println("validate hmac");
       // validate that the same nonce was used
       if (memcmp(nonce, response + 1, 4) != 0) {
         status = 1;
@@ -107,6 +158,7 @@ void loop() {
         if (memcmp(hmacResult, response + 5, 32) != 0) {
           status = 1;
         } else {
+      Serial.println("open");
           // toggle relais if successful
           uint8_t relais = RELAIS_0;
           if (response[0] == 1) {
@@ -154,7 +206,9 @@ void loop() {
     WiFiClient client;
 
     // submit read uid to backend
+    Serial.println("start request");
     http.begin(client, authEndpoint + rfiduid);
+    Serial.println("response");
     int httpCode = http.GET();
 
     // debug output
