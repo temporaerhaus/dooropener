@@ -1,8 +1,12 @@
+// network configuration
+IPAddress address(10, 10, 10, 10);
+const char* hostname = "dooropener";
 // http endpoint to submit scanned UIDs
-const String authEndpoint = "http://BACKEND/open?token=TOKEN&door=X&uid=";
+const String authEndpoint = "http://BACKEND/open?token=TOKEN&door=" + String(hostname) + "&uid=";
+const String testEndpoint = "http://BACKEND/opener-alive?door=" + String(hostname);
 
 // time to wait until next UID is read
-const int debounceTime = 3000;
+const int debounceTime = 1000;
 
 #ifdef ARDUINO_ESP32_EVB
   #include <mbedtls/md.h>

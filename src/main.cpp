@@ -5,12 +5,12 @@
 #include "config.h"
 
 static bool eth_connected = false;
+int counter = 0;
 
 void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
     case SYSTEM_EVENT_ETH_START:
       Serial.println("ETH Started");
-      ETH.setHostname("dooropener-salon");
       break;
 
     case SYSTEM_EVENT_ETH_CONNECTED:
@@ -33,7 +33,6 @@ void WiFiEvent(WiFiEvent_t event) {
 
     case SYSTEM_EVENT_ETH_DISCONNECTED:
       Serial.println("ETH Disconnected");
-      ETH.begin();
       eth_connected = false;
       break;
 
@@ -61,6 +60,8 @@ void setup() {
   Serial.println("Setting up Network...");
   WiFi.onEvent(WiFiEvent);
   ETH.begin();
+  ETH.config(address, gateway, subnet);
+  ETH.setHostname(hostname);
 
   #ifdef ARDUINO_ESP32_EVB
     // initialize rng
@@ -88,64 +89,83 @@ void setup() {
   Serial.println("ready...");
 }
 
+void keepAlive() {
+  HTTPClient http;
+  WiFiClient client;
+
+  // submit read uid to backend
+  http.begin(client, testEndpoint);
+  int httpCode = http.GET();
+  Serial.print("HTTP Status: ");
+  Serial.println(httpCode);
+
+  http.end();
+  client.stop();
+}
+
 void loop() {
   #ifdef ARDUINO_ESP32_EVB
+    if (counter++ > 60000) {
+      Serial.print("eth_connected: ");
+      Serial.println(eth_connected);
+      keepAlive();
+      counter = 0;
+    }
     WiFiClient client = serverSocket.available();
 
     if (client) {
-      uint32_t rand = esp_random();
-      Serial.print("sending nonce: ");
-      Serial.println(rand);
+      if (client.connected()) {
+        uint32_t rand = esp_random();
+        Serial.print("sending nonce: ");
+        Serial.println(rand);
 
-      uint8_t* nonce = (uint8_t*) &rand;
-      client.write(nonce, 4);
+        uint8_t *nonce = (uint8_t *)&rand;
+        client.write(nonce, 4);
+        client.flush();
 
-      // give backend one second to reply
-      delay(300);
+        // give backend one second to reply
+        delay(300);
 
-      // read backend response
-      uint8_t response[37];
-      for (uint8_t i = 0; i < 37; i += 1) {
-        response[i] = client.read();
-      }
+        // read backend response
+        uint8_t response[37];
+        for (uint8_t i = 0; i < 37; i += 1) {
+          response[i] = client.read();
+        }
 
-      Serial.println("received response");
+        uint8_t status = 0;
 
-      uint8_t status = 0;
-
-      // validate that the same nonce was used
-      if (memcmp(nonce, response + 1, 4) != 0) {
-        status = 1;
-      } else {
-        // compute hmac of payload
-        byte hmacResult[32];
-
-        mbedtls_md_context_t ctx;
-        mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-
-        mbedtls_md_init(&ctx);
-        mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 1);
-        mbedtls_md_hmac_starts(&ctx, (const unsigned char *) key, keyLength);
-        mbedtls_md_hmac_update(&ctx, (const unsigned char *) response, 5);
-        mbedtls_md_hmac_finish(&ctx, hmacResult);
-        mbedtls_md_free(&ctx);
-
-        // verify the hmac
-        if (memcmp(hmacResult, response + 5, 32) != 0) {
+        // validate that the same nonce was used
+        if (memcmp(nonce, response + 1, 4) != 0) {
           status = 1;
         } else {
-          Serial.println("toggling relais");
+          // compute hmac of payload
+          byte hmacResult[32];
 
-          // toggle relais if successful
-          uint8_t relais = response[0] == 1 ? RELAIS_0 : RELAIS_1;
+          mbedtls_md_context_t ctx;
+          mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
 
-          digitalWrite(relais, HIGH);
-          delay(1000);
-          digitalWrite(relais, LOW);
+          mbedtls_md_init(&ctx);
+          mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 1);
+          mbedtls_md_hmac_starts(&ctx, (const unsigned char *)key, keyLength);
+          mbedtls_md_hmac_update(&ctx, (const unsigned char *)response, 5);
+          mbedtls_md_hmac_finish(&ctx, hmacResult);
+          mbedtls_md_free(&ctx);
+
+          // verify the hmac
+          if (memcmp(hmacResult, response + 5, 32) != 0) {
+            status = 1;
+          } else {
+            // toggle relais if successful
+            uint8_t relais = response[0] == 1 ? RELAIS_0 : RELAIS_1;
+
+            digitalWrite(relais, HIGH);
+            delay(1000);
+            digitalWrite(relais, LOW);
+          }
         }
-      }
 
-      client.write(status);
+        client.write(status);
+      }
       client.stop();
       Serial.println("disconnecting client");
     }
@@ -174,9 +194,7 @@ void loop() {
       WiFiClient client;
 
       // submit read uid to backend
-      Serial.println("start request");
       http.begin(client, authEndpoint + rfiduid);
-      Serial.println("response");
       int httpCode = http.GET();
 
       // debug output
